@@ -1,5 +1,5 @@
 # OpenAI互換マルチプロバイダプロキシサーバー
-
+![alt text](image.png)
 ## 概要
 
 このプロジェクトは、OpenAI API互換のプロキシサーバーです。OpenAI、Anthropic、Google Gemini、Cerebras、Sambanova、Groqなど、複数のAIプロバイダに対応しています。  

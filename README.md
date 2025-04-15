@@ -1,5 +1,5 @@
 # OpenAI-Compatible Multi-Provider Proxy Server
-
+![alt text](image-1.png)
 [日本語READMEはこちら](./README_ja.md)
 
 ## Overview
