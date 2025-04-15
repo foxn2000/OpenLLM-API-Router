@@ -155,8 +155,24 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
 });
 
-// その他のOpenAIエンドポイントも必要に応じて同様に追加...
-// 例: app.get('/v1/models', async (req, res) => { ... });
+/**
+ * OpenAI API互換: モデル一覧取得エンドポイント
+ * model.yamlのavailableキー一覧をOpenAI API形式で返す
+ */
+app.get('/v1/models', (req, res) => {
+    const available = modelConfig.models && modelConfig.models.available ? modelConfig.models.available : {};
+    const now = Math.floor(Date.now() / 1000);
+    const data = Object.keys(available).map(key => ({
+        id: key,
+        object: "model",
+        created: now,
+        owned_by: "proxy"
+    }));
+    res.json({
+        object: "list",
+        data
+    });
+});
 
 // ルートパスへの簡単な応答 (サーバーが動作しているか確認用)
 app.get('/', (req, res) => {
