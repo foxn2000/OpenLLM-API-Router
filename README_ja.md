@@ -71,8 +71,54 @@ node server.js
 
 ### モデル設定
 
-- `model.yaml`を編集して利用可能なモデルやプロバイダ固有の設定を行います。
-- 各モデルにはAPIキーの環境変数名を指定してください。
+`model.yaml`を編集して利用可能なモデルやプロバイダ固有の設定を行います。  
+`models.available`の各エントリには以下を指定します。
+
+- `name`: プロバイダで必要なモデル名（例: "gpt-3.5-turbo"）
+- `baseUrl`: プロバイダのAPIエンドポイント
+- `apiKeyEnvName`: APIキーを格納する環境変数名
+- `isGoogleAI`, `anthropicVersion`, `defaultParams` など: プロバイダ固有のオプション
+
+#### `model.yaml`の例
+
+```yaml
+models:
+  available:
+    gpt-3.5-turbo:
+      name: gpt-3.5-turbo
+      baseUrl: https://api.openai.com/v1/chat/completions
+      apiKeyEnvName: OPENAI_API_KEY
+      defaultParams:
+        max_tokens: 2048
+        temperature: 1.0
+    claude-3-opus:
+      name: claude-3-opus-20240229
+      baseUrl: https://api.anthropic.com/v1/messages
+      apiKeyEnvName: ANTHROPIC_API_KEY
+      anthropicVersion: "2023-06-01"
+      defaultParams:
+        max_tokens: 2048
+        temperature: 1.0
+    gemini-pro:
+      name: gemini-pro
+      baseUrl: https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent
+      apiKeyEnvName: GOOGLE_API_KEY
+      isGoogleAI: true
+      defaultParams:
+        maxOutputTokens: 2048
+        temperature: 1.0
+```
+
+- 必要に応じてモデルを追加・削除できます。
+- `.env`ファイルに対応するAPIキー（例: `OPENAI_API_KEY=...`）を必ず設定してください。
+
+#### 各フィールドの説明
+
+- `name`: プロバイダ用のモデル名
+- `baseUrl`: モデルのAPIエンドポイント
+- `apiKeyEnvName`: APIキーの環境変数名
+- `defaultParams`: デフォルトパラメータ（例: `max_tokens`, `temperature`）
+- `isGoogleAI`, `anthropicVersion`: プロバイダ固有のオプション
 
 ### エラーハンドリング
 
@@ -80,4 +126,5 @@ node server.js
 
 ## ライセンス
 
-MIT License
+本プロジェクトはMITライセンスで提供されています。  
+詳細は[LICENSE](./LICENSE)ファイルを参照してください。
