@@ -1,0 +1,104 @@
+models:
+  # デフォルトで使用するモデル
+  default: gpt-4o-mini
+
+  # 利用可能なモデル
+  available:
+    cerebras-llama4:
+      name: llama-4-scout-17b-16e-instruct
+      baseUrl: https://api.cerebras.ai/v1/chat/completions
+      apiKeyEnvName: VITE_CEREBRAS_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 1000
+    # 他のモデルを必要に応じて追加
+    # Cerebras LLaMA 3モデル
+    cerebras-llama3.3:
+      name: llama-3.3-70b
+      baseUrl: https://api.cerebras.ai/v1/chat/completions
+      apiKeyEnvName: VITE_CEREBRAS_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    # OpenAI GPT-4o-miniモデル
+    openai-gpt4o-mini:
+      name: gpt-4o-mini
+      baseUrl: https://api.openai.com/v1/chat/completions
+      apiKeyEnvName: VITE_OPENAI_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    # OpenAI GPT-4oモデル
+    openai-gpt4o:
+      name: gpt-4o
+      baseUrl: https://api.openai.com/v1/chat/completions
+      apiKeyEnvName: VITE_OPENAI_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    # Claude 3.5モデル (Haiku) - 修正: 正しいモデル名とAPIエンドポイント
+    anthropic-claude-haiku:
+      name: claude-3-haiku-20240307 # Anthropicのドキュメントに基づく一般的な名前
+      baseUrl: https://api.anthropic.com/v1/messages
+      apiKeyEnvName: VITE_ANTHROPIC_API_KEY
+      anthropicVersion: "2023-06-01" # Anthropic APIバージョン指定
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    # Claude 3.5モデル (Sonnet) - 修正: 正しいモデル名とAPIエンドポイント
+    anthropic-claude-sonnet:
+      name: claude-3-5-sonnet-20240620 # Anthropicのドキュメントに基づく名前
+      baseUrl: https://api.anthropic.com/v1/messages
+      apiKeyEnvName: VITE_ANTHROPIC_API_KEY
+      anthropicVersion: "2023-06-01" # Anthropic APIバージョン指定
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    # Google Gemini 2.5 Pro - 修正: APIエンドポイントとパラメータ名
+    google-gemini-25-pro:
+      name: models/gemini-1.5-pro-latest # Google AI Studioに基づく名前
+      baseUrl: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent # 正しいエンドポイント
+      apiKeyEnvName: VITE_GEMINI_API_KEY
+      isGoogleAI: true # Google AI Studio APIフラグ
+      defaultParams:
+        temperature: 0.7
+        maxOutputTokens: 8192 # Google AI Studioのパラメータ名
+
+    # Google Gemini 2.0 Flash - 修正: APIエンドポイントとパラメータ名
+    google-gemini-20-flash:
+      name: models/gemini-1.5-flash-latest # Google AI Studioに基づく名前
+      baseUrl: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent # 正しいエンドポイント
+      apiKeyEnvName: VITE_GEMINI_API_KEY
+      isGoogleAI: true # Google AI Studio APIフラグ
+      defaultParams:
+        temperature: 0.7
+        maxOutputTokens: 8192 # Google AI Studioのパラメータ名
+
+    sambanova-deepseek-v3:
+      name: DeepSeek-V3-0324
+      baseUrl: https://api.sambanova.ai/v1/chat/completions
+      apiKeyEnvName: VITE_SAMBANOVA_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    sambanova-llama31-405b:
+      name: Meta-Llama-3.1-405B-Instruct
+      baseUrl: https://api.sambanova.ai/v1/chat/completions
+      apiKeyEnvName: VITE_SAMBANOVA_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096
+
+    sambanova-Qwen-72b:
+      name: Qwen2.5-72B-Instruct
+      baseUrl: https://api.sambanova.ai/v1/chat/completions
+      apiKeyEnvName: VITE_SAMBANOVA_API_KEY
+      defaultParams:
+        temperature: 0.7
+        max_tokens: 4096

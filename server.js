@@ -2,6 +2,17 @@ require('dotenv').config(); // 環境変数を .env ファイルから読み込�
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const yaml = require('js-yaml');
+const fs = require('fs');
+
+let modelConfig;
+try {
+    modelConfig = yaml.load(fs.readFileSync('model.yaml', 'utf8'));
+    console.log('model.yaml を読み込みました。');
+} catch (e) {
+    console.error('model.yaml の読み込みまたはパースに失敗しました:', e);
+    process.exit(1);
+}
 
 const app = express();
 const port = process.env.PORT || 3001; // ポート番号 (環境変数 PORT があればそれを使う)
@@ -33,73 +44,112 @@ app.use(cors({
 // JSONリクエストボディをパースするためのミドルウェア
 app.use(express.json());
 
-// Cerebras APIのエンドポイントURL (仮。実際のURLに置き換える必要があります)
-// 注意: Cerebrasのドキュメントを確認し、正しいAPIエンドポイントURLを設定してください。
-const CEREBRAS_API_BASE_URL = process.env.CEREBRAS_API_BASE_URL || 'https://api.cerebras.ai'; // 例: 必要に応じて変更
-
-// OpenAI互換エンドポイント
+// マルチプロバイダ対応エンドポイント
 app.post('/v1/chat/completions', async (req, res) => {
-    const cerebrasApiKey = process.env.CEREBRAS_API_KEY;
-
-    if (!cerebrasApiKey || cerebrasApiKey === 'YOUR_CEREBRAS_API_KEY_HERE') {
-        console.error('エラー: CEREBRAS_API_KEY 環境変数が設定されていません。');
-        return res.status(500).json({ error: 'サーバー設定エラー: APIキーが設定されていません。' });
-    }
-
-    // フロントエンドからのAuthorizationヘッダーは削除または無視
-    const headers = { ...req.headers };
-    delete headers.authorization; // フロントエンドからのキーは使わない
-    delete headers.host; // hostヘッダーも転送しない方が良い場合がある
-    delete headers['content-length']; // Content-Lengthはaxiosが自動計算するので削除
-
-    // Cerebras APIキーを付与
-    headers['Authorization'] = `Bearer ${cerebrasApiKey}`;
-    // Content-Typeは通常 application/json
-    headers['Content-Type'] = 'application/json';
-
-    // Cerebras APIのエンドポイントURLを構築
-    // 注意: Cerebras APIがOpenAIと同じパス構造 (/v1/chat/completions) を持つか確認が必要です。
-    // もし異なる場合は、ここのURL構築ロジックを調整してください。
-    const cerebrasApiUrl = `${CEREBRAS_API_BASE_URL}/v1/chat/completions`;
-
-    console.log(`リクエスト転送中: ${req.method} ${cerebrasApiUrl}`);
-    console.log('リクエストボディ:', JSON.stringify(req.body, null, 2));
-    // console.log('転送ヘッダー:', JSON.stringify(headers, null, 2)); // デバッグ用にヘッダーを表示（APIキーが含まれるため注意）
-
     try {
+        // model.yamlのdefaultは無視し、リクエストのmodelでavailableのキー名でモデルを特定
+        const requestedKey = req.body.model;
+        const modelInfo = modelConfig.models.available[requestedKey];
+        if (!modelInfo) {
+            return res.status(400).json({ error: '指定されたモデルキーが設定ファイルに存在しません。' });
+        }
+
+        // APIキー取得
+        const apiKey = process.env[modelInfo.apiKeyEnvName];
+        if (!apiKey || apiKey === `YOUR_${modelInfo.apiKeyEnvName}_HERE`) {
+            return res.status(500).json({ error: `APIキー(${modelInfo.apiKeyEnvName})が設定されていません。` });
+        }
+
+        // ヘッダー構築
+        const headers = { ...req.headers };
+        delete headers.authorization;
+        delete headers.host;
+        delete headers['content-length'];
+        headers['Content-Type'] = 'application/json';
+
+        // プロバイダごとの分岐
+        let url = modelInfo.baseUrl;
+        let data = { ...req.body, model: modelInfo.name };
+        let responseType = req.body.stream ? 'stream' : 'json';
+
+        // Anthropic
+        if (url.includes('anthropic.com')) {
+            headers['x-api-key'] = apiKey;
+            headers['anthropic-version'] = modelInfo.anthropicVersion || '2023-06-01';
+            delete headers['Authorization'];
+            // OpenAI形式→Anthropic形式変換
+            data = {
+                model: modelInfo.name,
+                max_tokens: req.body.max_tokens || (modelInfo.defaultParams ? modelInfo.defaultParams.max_tokens : undefined),
+                temperature: req.body.temperature || (modelInfo.defaultParams ? modelInfo.defaultParams.temperature : undefined),
+                messages: req.body.messages,
+                stream: !!req.body.stream,
+            };
+            if (req.body.system) {
+                data.system = req.body.system;
+            }
+        }
+        // Google Gemini
+        else if (modelInfo.isGoogleAI) {
+            url += `?key=${apiKey}`;
+            // OpenAI形式→Google Gemini形式変換
+            const contents = (req.body.messages || []).map(msg => {
+                if (msg.role === 'system') {
+                    return { role: 'user', parts: [{ text: msg.content }] };
+                }
+                return { role: msg.role, parts: [{ text: msg.content }] };
+            });
+            data = {
+                contents,
+                generationConfig: {
+                    temperature: req.body.temperature || (modelInfo.defaultParams ? modelInfo.defaultParams.temperature : undefined),
+                    maxOutputTokens: req.body.max_tokens || (modelInfo.defaultParams ? modelInfo.defaultParams.maxOutputTokens : undefined),
+                }
+            };
+            delete headers['Authorization'];
+        }
+        // OpenAI互換 (Cerebras, OpenAI, Sambanova, Groq)
+        else {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+            data = { ...req.body, model: modelInfo.name };
+        }
+
+        // リクエスト送信
         const response = await axios({
             method: 'post',
-            url: cerebrasApiUrl,
-            data: req.body, // フロントエンドからのリクエストボディをそのまま使用
-            headers: headers,
-            responseType: req.body.stream ? 'stream' : 'json' // ストリーミング対応
+            url,
+            data,
+            headers,
+            responseType
         });
 
-        // ストリーミングの場合
+        // ストリーミング
         if (req.body.stream) {
             res.setHeader('Content-Type', response.headers['content-type'] || 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
-            response.data.pipe(res); // レスポンスストリームをクライアントにパイプ
+            response.data.pipe(res);
         } else {
-            // 通常のJSONレスポンスの場合
             res.status(response.status).json(response.data);
         }
-        console.log(`レスポンスステータス: ${response.status}`);
-
     } catch (error) {
-        console.error('Cerebras APIへのリクエスト中にエラーが発生しました:', error.message);
+        console.error('APIリクエスト中にエラーが発生:', error.message);
         if (error.response) {
-            // Cerebras APIからのエラーレスポンスがある場合
-            console.error('Cerebras APIエラーレスポンス:', error.response.status, error.response.data);
-            res.status(error.response.status).json(error.response.data);
+            // error.response.data が循環参照を含む場合に備え、JSON化できない場合はテキスト化
+            let safeData = error.response.data;
+            if (typeof safeData !== 'object') {
+                // そのまま返す
+            } else {
+                try {
+                    JSON.stringify(safeData);
+                } catch (e) {
+                    safeData = { error: 'APIエラー: レスポンスデータをJSON化できません', status: error.response.status };
+                }
+            }
+            res.status(error.response.status).json(safeData);
         } else if (error.request) {
-            // リクエストは送信されたが、レスポンスがない場合
-            console.error('Cerebras APIからのレスポンスがありませんでした。');
             res.status(504).json({ error: 'Gateway Timeout: 上流サーバーからの応答がありません。' });
         } else {
-            // リクエスト設定時のエラーなど
-            console.error('リクエスト設定エラー:', error.message);
             res.status(500).json({ error: 'Internal Server Error: リクエスト処理中にエラーが発生しました。' });
         }
     }
