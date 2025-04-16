@@ -4,6 +4,7 @@ const cors = require('cors');
 const axios = require('axios');
 const yaml = require('js-yaml');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 
 let modelConfig;
 try {
@@ -16,6 +17,33 @@ try {
 
 const app = express();
 const port = process.env.PORT || 3001; // ポート番号 (環境変数 PORT があればそれを使う)
+
+// IPアドレスごとのレートリミッター設定
+const dailyLimit = process.env.DAILY_RATE_LIMIT || 1000; // デフォルト値: 1日1000リクエスト
+const limiter = rateLimit({
+    windowMs: 24 * 60 * 60 * 1000, // 24時間
+    max: dailyLimit, // IPアドレスごとの最大リクエスト数
+    standardHeaders: true, // RateLimit-*ヘッダーを含める
+    message: {
+        error: 'IPアドレスごとのレートリミットを超過しました。24時間後に再度お試しください。'
+    }
+});
+
+// サーバー全体のレートリミッター設定
+const globalDailyLimit = process.env.GLOBAL_DAILY_RATE_LIMIT || 10000; // デフォルト値: 1日10000リクエスト
+const globalLimiter = rateLimit({
+    windowMs: 24 * 60 * 60 * 1000, // 24時間
+    max: globalDailyLimit, // サーバー全体の最大リクエスト数
+    standardHeaders: true, // RateLimit-*ヘッダーを含める
+    message: {
+        error: 'サーバーの1日のリクエスト上限に達しました。明日までお待ちください。'
+    },
+    keyGenerator: () => 'global' // すべてのリクエストで同じキーを使用することで、グローバルカウンターとして機能
+});
+
+// レートリミッターを/v1/chat/completionsエンドポイントに適用
+// グローバルリミッターを先に適用し、その後IPアドレスごとのリミッターを適用
+app.use('/v1/chat/completions', globalLimiter, limiter);
 
 // CORS設定
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
