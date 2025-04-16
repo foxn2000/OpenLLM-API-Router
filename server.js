@@ -20,8 +20,8 @@ const ipWhitelistMiddleware = (req, res, next) => {
         return res.status(403).json({ error: 'IPアドレス制限が有効ですが、許可されたIPアドレスが設定されていません。' });
     }
 
-    // クライアントのIPアドレスを取得
-    const clientIP = req.ip;
+    // クライアントのIPアドレスを取得（X-Forwarded-For ヘッダーを使用しない）
+    const clientIP = req.socket.remoteAddress;
 
     // IPアドレスが許可リストに含まれているか確認
     if (!allowedIPs.includes(clientIP)) {
@@ -32,9 +32,8 @@ const ipWhitelistMiddleware = (req, res, next) => {
     next();
 };
 
-// Express アプリケーションの信頼プロキシ設定
+// Express アプリケーションの設定
 const app = express();
-app.set('trust proxy', true); // プロキシを信頼し、X-Forwarded-For ヘッダーからクライアントIPを取得
 
 let modelConfig;
 try {
@@ -58,7 +57,8 @@ const limiter = rateLimit({
     standardHeaders: true, // RateLimit-*ヘッダーを含める
     message: {
         error: 'IPアドレスごとのレートリミットを超過しました。24時間後に再度お試しください。'
-    }
+    },
+    trustProxy: false // プロキシを信頼しない
 });
 
 // サーバー全体のレートリミッター設定
@@ -70,7 +70,8 @@ const globalLimiter = rateLimit({
     message: {
         error: 'サーバーの1日のリクエスト上限に達しました。明日までお待ちください。'
     },
-    keyGenerator: () => 'global' // すべてのリクエストで同じキーを使用することで、グローバルカウンターとして機能
+    keyGenerator: () => 'global', // すべてのリクエストで同じキーを使用することで、グローバルカウンターとして機能
+    trustProxy: false // プロキシを信頼しない
 });
 
 // レートリミッターを/v1/chat/completionsエンドポイントに適用
