@@ -6,6 +6,36 @@ const yaml = require('js-yaml');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
+// IPアドレス制限のミドルウェア
+const ipWhitelistMiddleware = (req, res, next) => {
+    // IPアドレス制限が有効かどうかを確認
+    if (process.env.ENABLE_IP_WHITELIST !== 'true') {
+        return next();
+    }
+
+    // 許可されたIPアドレスのリストを取得
+    const allowedIPs = process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',').map(ip => ip.trim()) : [];
+    if (allowedIPs.length === 0) {
+        console.warn('警告: ALLOWED_IPS が設定されていません。全てのIPアドレスからのアクセスを拒否します。');
+        return res.status(403).json({ error: 'IPアドレス制限が有効ですが、許可されたIPアドレスが設定されていません。' });
+    }
+
+    // クライアントのIPアドレスを取得
+    const clientIP = req.ip;
+
+    // IPアドレスが許可リストに含まれているか確認
+    if (!allowedIPs.includes(clientIP)) {
+        console.warn(`アクセス拒否: 許可されていないIPアドレス ${clientIP} からのアクセスです。`);
+        return res.status(403).json({ error: '許可されていないIPアドレスからのアクセスです。' });
+    }
+
+    next();
+};
+
+// Express アプリケーションの信頼プロキシ設定
+const app = express();
+app.set('trust proxy', true); // プロキシを信頼し、X-Forwarded-For ヘッダーからクライアントIPを取得
+
 let modelConfig;
 try {
     modelConfig = yaml.load(fs.readFileSync('model.yaml', 'utf8'));
@@ -15,8 +45,10 @@ try {
     process.exit(1);
 }
 
-const app = express();
 const port = process.env.PORT || 3001; // ポート番号 (環境変数 PORT があればそれを使う)
+
+// IPアドレス制限を最初に適用
+app.use(ipWhitelistMiddleware);
 
 // IPアドレスごとのレートリミッター設定
 const dailyLimit = process.env.DAILY_RATE_LIMIT || 1000; // デフォルト値: 1日1000リクエスト
