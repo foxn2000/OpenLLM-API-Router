@@ -6,6 +6,27 @@ const yaml = require('js-yaml');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
+// APIキー認証ミドルウェア
+const authenticateApiKey = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+        return res.status(401).json({ error: 'APIキーが必要です。Authorization: Bearer <API_KEY> の形式で指定してください。' });
+    }
+
+    const [bearer, token] = authHeader.split(' ');
+    
+    if (bearer !== 'Bearer' || !token) {
+        return res.status(401).json({ error: '不正な認証形式です。Authorization: Bearer <API_KEY> の形式で指定してください。' });
+    }
+
+    if (token !== process.env.ROUTER_API_KEY) {
+        return res.status(401).json({ error: '無効なAPIキーです。' });
+    }
+
+    next();
+};
+
 // IPアドレス制限のミドルウェア
 const ipWhitelistMiddleware = (req, res, next) => {
     // IPアドレス制限が有効かどうかを確認
@@ -46,7 +67,37 @@ try {
 
 const port = process.env.PORT || 3001; // ポート番号 (環境変数 PORT があればそれを使う)
 
-// IPアドレス制限を最初に適用
+// CORS設定
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+if (allowedOrigins.length === 0) {
+    console.warn('警告: ALLOWED_ORIGINS 環境変数が設定されていません。全てのオリジンからのアクセスを許可します。本番環境では必ず設定してください。');
+}
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // 環境変数が設定されていない場合は全てのオリジンを許可 (開発用)
+        if (allowedOrigins.length === 0) {
+            return callback(null, true);
+        }
+        // リクエスト元オリジンがない場合 (curlなど) または許可リストに含まれる場合
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.error(`CORSエラー: オリジン ${origin} からのアクセスは許可されていません。`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 許可するHTTPメソッド
+    allowedHeaders: ['Content-Type', 'Authorization'], // 許可するリクエストヘッダー
+}));
+
+// JSONリクエストボディをパースするためのミドルウェア
+app.use(express.json());
+
+// APIキー認証を/v1エンドポイントに適用
+app.use('/v1', authenticateApiKey);
+
+// IPアドレス制限を適用
 app.use(ipWhitelistMiddleware);
 
 // IPアドレスごとのレートリミッター設定
@@ -78,32 +129,6 @@ const globalLimiter = rateLimit({
 // グローバルリミッターを先に適用し、その後IPアドレスごとのリミッターを適用
 app.use('/v1/chat/completions', globalLimiter, limiter);
 
-// CORS設定
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
-if (allowedOrigins.length === 0) {
-    console.warn('警告: ALLOWED_ORIGINS 環境変数が設定されていません。全てのオリジンからのアクセスを許可します。本番環境では必ず設定してください。');
-}
-
-app.use(cors({
-    origin: function (origin, callback) {
-        // 環境変数が設定されていない場合は全てのオリジンを許可 (開発用)
-        if (allowedOrigins.length === 0) {
-            return callback(null, true);
-        }
-        // リクエスト元オリジンがない場合 (curlなど) または許可リストに含まれる場合
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.error(`CORSエラー: オリジン ${origin} からのアクセスは許可されていません。`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 許可するHTTPメソッド
-    allowedHeaders: ['Content-Type', 'Authorization'], // 許可するリクエストヘッダー
-}));
-
-// JSONリクエストボディをパースするためのミドルウェア
-app.use(express.json());
 
 // マルチプロバイダ対応エンドポイント
 app.post('/v1/chat/completions', async (req, res) => {
